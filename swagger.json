@@ -1,0 +1,51 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "LocalStack Demo API"
+  },
+  "basePath": "/prod",
+  "schemes": ["http", "https"],
+  "paths": {
+    "/products": {
+      "get": {
+        "summary": "List all products",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          }
+        },
+        "x-amazon-apigateway-integration": {
+          "uri": "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:productFunction/invocations",
+          "passthroughBehavior": "when_no_match",
+          "httpMethod": "POST",
+          "type": "aws_proxy"
+        }
+      }
+    },
+    "/products/{id}": {
+      "get": {
+        "summary": "Get a product by ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          }
+        },
+        "x-amazon-apigateway-integration": {
+          "uri": "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:000000000000:function:productFunction/invocations",
+          "passthroughBehavior": "when_no_match",
+          "httpMethod": "POST",
+          "type": "aws_proxy"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "basic-api-gway-lamba-app",
+  "version": "1.0.0",
+  "main": "deploy.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "aws-sdk": "^2.1691.0",
+    "axios": "^0.21.1"
+  }
+}
