@@ -41,39 +41,58 @@ function zipLambdaFunction() {
 
 // Function to create or update Lambda function
 async function deployLambda() {
-  const functionName = 'productFunction';
-  const handler = 'index.handler';
-  const role = 'arn:aws:iam::000000000000:role/lambda-role';
-
-  try {
-    await zipLambdaFunction();
-    const zipFile = fs.readFileSync(path.join(__dirname, 'lambda.zip'));
-
+    const functionName = 'productFunction';
+    const handler = 'index.handler';
+    const role = 'arn:aws:iam::000000000000:role/lambda-role';
+  
     try {
-      await lambda.createFunction({
+      await zipLambdaFunction();
+      const zipFile = fs.readFileSync(path.join(__dirname, 'lambda.zip'));
+  
+      const lambdaParams = {
         FunctionName: functionName,
         Handler: handler,
         Role: role,
         Code: { ZipFile: zipFile },
         Runtime: 'nodejs14.x',
-        Timeout: 10  // Set timeout to 10 seconds
-      }).promise();
-      console.log(`Lambda function ${functionName} created`);
-    } catch (error) {
-      if (error.code === 'ResourceConflictException') {
-        await lambda.updateFunctionCode({
-          FunctionName: functionName,
-          ZipFile: zipFile
-        }).promise();
-        console.log(`Lambda function ${functionName} updated`);
-      } else {
-        throw error;
+        Timeout: 900,  // Set timeout to 15 minutes
+        Environment: {
+          Variables: {
+            accessKeyId: 'test',
+            awsregion: 'us-east-1',
+            secretAccessKey: 'test',
+            NODE_OPTIONS: '--inspect-brk=0.0.0.0:9229',
+          }
+        }
+      };
+  
+      try {
+        await lambda.createFunction(lambdaParams).promise();
+        console.log(`Lambda function ${functionName} created`);
+      } catch (error) {
+        if (error.code === 'ResourceConflictException') {
+          // If the function already exists, update its code and configuration
+          await lambda.updateFunctionCode({
+            FunctionName: functionName,
+            ZipFile: zipFile
+          }).promise();
+          
+          // Update function configuration
+          await lambda.updateFunctionConfiguration({
+            FunctionName: functionName,
+            Timeout: lambdaParams.Timeout,
+            Environment: lambdaParams.Environment
+          }).promise();
+          
+          console.log(`Lambda function ${functionName} updated`);
+        } else {
+          throw error;
+        }
       }
+    } catch (error) {
+      console.error(`Error deploying Lambda function:`, error);
     }
-  } catch (error) {
-    console.error(`Error deploying Lambda function:`, error);
   }
-}
 
 // Function to create or update API Gateway
 async function deployApiGateway() {
