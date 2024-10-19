@@ -23,6 +23,22 @@
         }
       }
     },
+"/localProduct": {
+  "get": {
+    "summary": "Redirect to local server",
+    "responses": {
+      "200": {
+        "description": "Successful response"
+      }
+    },
+    "x-amazon-apigateway-integration": {
+      "uri": "http://${stageVariables.hostIP}:3002/localProduct",
+      "passthroughBehavior": "when_no_match",
+      "httpMethod": "GET",
+      "type": "http_proxy"
+    }
+      }
+    },
     "/products/{id}": {
       "get": {
         "summary": "Get a product by ID",

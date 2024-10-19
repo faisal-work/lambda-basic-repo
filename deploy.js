@@ -2,6 +2,24 @@ const AWS = require('aws-sdk');
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const { exec } = require('child_process');
+
+// Function to get the host IP
+const getHostIP = () => {
+  return new Promise((resolve, reject) => {
+    exec('hostname -I | awk \'{print $1}\'', (error, stdout, stderr) => {
+      if (error) {
+        reject(`Error getting host IP: ${error.message}`);
+        return;
+      }
+      if (stderr) {
+        reject(`Error getting host IP: ${stderr}`);
+        return;
+      }
+      resolve(stdout.trim());
+    });
+  });
+};
 
 // Configure AWS SDK to use LocalStack
 AWS.config.update({
@@ -17,6 +35,7 @@ const apigateway = new AWS.APIGateway();
 
 // Function to zip Lambda function
 function zipLambdaFunction() {
+
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream('lambda.zip');
     const archive = archiver('zip', {
@@ -41,62 +60,64 @@ function zipLambdaFunction() {
 
 // Function to create or update Lambda function
 async function deployLambda() {
-    const functionName = 'productFunction';
-    const handler = 'index.handler';
-    const role = 'arn:aws:iam::000000000000:role/lambda-role';
-  
-    try {
-      await zipLambdaFunction();
-      const zipFile = fs.readFileSync(path.join(__dirname, 'lambda.zip'));
-  
-      const lambdaParams = {
-        FunctionName: functionName,
-        Handler: handler,
-        Role: role,
-        Code: { ZipFile: zipFile },
-        Runtime: 'nodejs14.x',
-        Timeout: 900,  // Set timeout to 15 minutes
-        Environment: {
-          Variables: {
-            accessKeyId: 'test',
-            awsregion: 'us-east-1',
-            secretAccessKey: 'test',
-            NODE_OPTIONS: '--inspect-brk=0.0.0.0:9229',
-          }
-        }
-      };
-  
-      try {
-        await lambda.createFunction(lambdaParams).promise();
-        console.log(`Lambda function ${functionName} created`);
-      } catch (error) {
-        if (error.code === 'ResourceConflictException') {
-          // If the function already exists, update its code and configuration
-          await lambda.updateFunctionCode({
-            FunctionName: functionName,
-            ZipFile: zipFile
-          }).promise();
-          
-          // Update function configuration
-          await lambda.updateFunctionConfiguration({
-            FunctionName: functionName,
-            Timeout: lambdaParams.Timeout,
-            Environment: lambdaParams.Environment
-          }).promise();
-          
-          console.log(`Lambda function ${functionName} updated`);
-        } else {
-          throw error;
+  const functionName = 'productFunction';
+  const handler = 'index.handler';
+  const role = 'arn:aws:iam::000000000000:role/lambda-role';
+  const hostIP = await getHostIP();
+
+  try {
+    await zipLambdaFunction();
+    const zipFile = fs.readFileSync(path.join(__dirname, 'lambda.zip'));
+
+    const lambdaParams = {
+      FunctionName: functionName,
+      Handler: handler,
+      Role: role,
+      Code: { ZipFile: zipFile },
+      Runtime: 'nodejs14.x',
+      Timeout: 900,
+      Environment: {
+        Variables: {
+          accessKeyId: 'test',
+          awsregion: 'us-east-1',
+          secretAccessKey: 'test',
+          NODE_OPTIONS: '--inspect-brk=0.0.0.0:9229',
+          HOST_IP: hostIP,
+          IS_LOCAL: "true"
         }
       }
+    };
+
+    try {
+      await lambda.createFunction(lambdaParams).promise();
+      console.log(`Lambda function ${functionName} created`);
     } catch (error) {
-      console.error(`Error deploying Lambda function:`, error);
+      if (error.code === 'ResourceConflictException') {
+        await lambda.updateFunctionCode({
+          FunctionName: functionName,
+          ZipFile: zipFile
+        }).promise();
+        
+        await lambda.updateFunctionConfiguration({
+          FunctionName: functionName,
+          Timeout: lambdaParams.Timeout,
+          Environment: lambdaParams.Environment
+        }).promise();
+        
+        console.log(`Lambda function ${functionName} updated`);
+      } else {
+        throw error;
+      }
     }
+  } catch (error) {
+    console.error(`Error deploying Lambda function:`, error);
   }
+}
 
 // Function to create or update API Gateway
 async function deployApiGateway() {
   const apiName = 'LocalStackDemoAPI';
+  const hostIP = await getHostIP();
 
   try {
     const apis = await apigateway.getRestApis().promise();
@@ -109,6 +130,11 @@ async function deployApiGateway() {
 
     const apiGatewayConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'swagger.json'), 'utf8'));
 
+    // Update the localProduct integration URI with the host IP
+    // if (apiGatewayConfig.paths['/localProduct']) {
+    //   apiGatewayConfig.paths['/localProduct'].get['x-amazon-apigateway-integration'].uri = `http://${hostIP}:3002/localProduct`;
+    // }
+
     await apigateway.putRestApi({
       restApiId: api.id,
       mode: 'overwrite',
@@ -118,7 +144,10 @@ async function deployApiGateway() {
 
     await apigateway.createDeployment({
       restApiId: api.id,
-      stageName: 'prod'
+      stageName: 'prod',
+      variables: {
+        hostIP: hostIP
+      }
     }).promise();
     console.log(`API Gateway ${apiName} deployed to stage 'prod'`);
 
